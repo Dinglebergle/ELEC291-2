@@ -195,15 +195,13 @@ void Hardware_Init(void){
 void main(void)
 {
 	long int count;
-	float T, f, Ctotal, cap;
+	float T, f, cap;
 	char lcd_buff[17];
 	int i;
 	float a;
 	int j;
 	int LED_state = 2;
 	int current, previous;
-    float C1 = 0.000000001;
-    float C2 = 0.0000001;
 
 	Configure_Pins();
 	LCD_4BIT();
@@ -212,13 +210,11 @@ void main(void)
 
 	RCC->IOPENR |= 0x00000001; // peripheral clock enable for port A
 	
-    /* USING THIS */
 	GPIOA->MODER &= ~(BIT16 | BIT17); // Make pin PA8 input
-	// Checking period at pin PA8:
+	// Activate pull up for pin PA8:
 	GPIOA->PUPDR |= BIT16; 
 	GPIOA->PUPDR &= ~(BIT17); 
 
-    /* NOT USING THIS (keep for now) */
 	GPIOA->MODER &= ~(BIT22 | BIT23); // Make pin PA11 input
 	// Activate pull up for pin PA11:
 	GPIOA->PUPDR |= BIT22; 
@@ -230,26 +226,237 @@ void main(void)
 	GPIOA->PUPDR &= ~(BIT31 | BIT29 | BIT27 | BIT25); // Clear pull-down mode for PA15, PA14, PA13, and PA12
 
 	waitms(500); // Wait for putty to start.
-    printf("Frequency Measurements");
 	//printf("Period measurement using the Systick free running counter.\r\n"
 	      //"Connect signal to PA8 (pin 18).\r\n");
-	// LCDprint("LCD 4-bit test:", 1, 1);
-	// LCDprint("Hello, World!", 2, 1);
+	LCDprint("LCD 4-bit test:", 1, 1);
+	LCDprint("Hello, World!", 2, 1);
 
 	previous=(GPIOA->IDR&BIT11)?0:1;
 
 	while(1) {
-		count=GetPeriod(100);
-		if(count>0 && f < 120000) {
-			T=count/(F_CPU*100.0); // Since we have the time of 100 periods, we need to divide by 100
-			f=1.0/T;
-            //Ctotal = C1*C2/(C1+C2);
-            //ind = ((1/(2*3.141592653589))/f )*((1/(2*3.141592653589))/f ) / Ctotal
+
+		int s1 = (GPIOA->IDR & BIT15) ? 1 : 0; // Read PA15
+		int s2 = (GPIOA->IDR & BIT14) ? 1 : 0; // Read PA14
+		int s3 = (GPIOA->IDR & BIT13) ? 1 : 0; // Read PA13
+		int s4 = (GPIOA->IDR & BIT12) ? 1 : 0; // Read PA12
+
+		int pb = (GPIOA->IDR & BIT11) ? 1 : 0; // Read PA11
+
+		// LED_state = 0 means change nothing
+		// LED_state = 1 means change red
+		// LED_state = 2 means change blue
+		// LED_state = 3 means change green
+		if(LED_state == 0){
+			j = readADC(ADC_CHSELR_CHSEL6);
+			a = (j*3.3)/0x1000;
 			
-			// make plot, show on serial port, average out frequencies
-			printf("%lf", f);
-            waitms(500);
+			if(a < 0.1){
+				LED_state = 3;
+			}
+			else if (a > 3.1){
+				LED_state = 1;
+			}
+		}
+		else if(LED_state == 1)
+		{
+			// Changes to pwm3
+			
+			// Reads VRy Channel
+			j = readADC(ADC_CHSELR_CHSEL7);
+			a = (j*3.3)/0x1000;
+
+			if(a < 0.1){
+				while(a < 0.1){
+					pwm3 += 5;
+					if(pwm3 >= 255){
+						pwm3 = 5;
+					}
+					waitms(100);
+					j = readADC(ADC_CHSELR_CHSEL7);
+					a = (j*3.3)/0x1000;
+					printf("pwm3: %d\n\r", pwm3);
+					
+				}
+			}
+			else if (a > 3.1){
+				while(a > 3.1){
+					pwm3 = pwm3 - 5;
+					if(pwm3 <= 0){
+						pwm3 = 250;
+					}
+					waitms(100);
+					j = readADC(ADC_CHSELR_CHSEL7);
+					a = (j*3.3)/0x1000;
+					printf("pwm3: %d \n\r", pwm3);
+				}
+			}
+			
+			// Reads VRx Channel
+			j = readADC(ADC_CHSELR_CHSEL6);
+			a = (j*3.3)/0x1000;
+			
+			if(a > 3.0){
+				LED_state = 2;
+				waitms(500);
+			}
+			else if (a < 0.1){
+				LED_state = 0;
+				waitms(500);
+			}
+		} 
+		else if (LED_state == 2) { // Change Blue Channel
+			// Reads VRy Channel
+			j = readADC(ADC_CHSELR_CHSEL7);
+			a = (j*3.3)/0x1000;
+
+			if(a < 0.1){
+				while(a < 0.1){
+					pwm4 += 5;
+					if(pwm4 >= 255){
+						pwm4 = 5;
+					}
+					waitms(100);
+					j = readADC(ADC_CHSELR_CHSEL7);
+					a = (j*3.3)/0x1000;
+					printf("pwm4: %d\n\r", pwm4);
+					
+				}
+			}
+			else if (a > 3.1){
+				while(a > 3.1){
+					pwm4 = pwm4 - 5;
+					if(pwm4 <= 0){
+						pwm4 = 250;
+					}
+					waitms(100);
+					j = readADC(ADC_CHSELR_CHSEL7);
+					a = (j*3.3)/0x1000;
+					printf("pwm4: %d \n\r", pwm4);
+				}
+			}
+			// Reads VRx Channel
+			j = readADC(ADC_CHSELR_CHSEL6);
+			a = (j*3.3)/0x1000;
+			
+			if(a > 3.0){
+				LED_state = 3;
+				waitms(500);
+			}
+			else if (a < 0.1){
+				LED_state = 1;
+				waitms(500);
+			}
+		} else if (LED_state == 3) { // Change Green Channel
+					// Reads VRy Channel
+			j = readADC(ADC_CHSELR_CHSEL7);
+			a = (j*3.3)/0x1000;
+
+			if(a < 0.1){
+				while(a < 0.1){
+					pwm5 += 5;
+					if(pwm5 >= 255){
+						pwm5 = 5;
+					}
+					waitms(100);
+					j = readADC(ADC_CHSELR_CHSEL7);
+					a = (j*3.3)/0x1000;
+					printf("pwm5: %d\n\r", pwm5);
+					
+				}
+			}
+			else if (a > 3.1){
+				while(a > 3.1){
+					pwm5 = pwm5 - 5;
+					if(pwm5 <= 0){
+						pwm5 = 250;
+					}
+					waitms(100);
+					j = readADC(ADC_CHSELR_CHSEL7);
+					a = (j*3.3)/0x1000;
+					printf("pwm5: %d \n\r", pwm5);
+				}
+			}
+			
+			// Reads VRx Channel
+			j = readADC(ADC_CHSELR_CHSEL6);
+			a = (j*3.3)/0x1000;
+			
+			if(a > 3.0){
+				LED_state = 0;
+				waitms(500);
+			}
+			else if (a < 0.1){
+				LED_state = 2;
+				waitms(500);
+			}
+		}
+
+		// pushbutton
+		current=(GPIOA->IDR&BIT11)?1:0;
+		if(current!=previous)
+		{
+			previous=current;
+		}
+
+		if (s4 == 1 && s3 == 0 && s2 == 1 && s1 == 0) {
+			count=GetPeriod(100);
+			if(count>0 && f < 120000) {
+				T=count/(F_CPU*100.0); // Since we have the time of 100 periods, we need to divide by 100
+				f=1.0/T;
+				cap = (1.44/(f*(5000*3)));
+				if (cap <= 0.000000002) {
+					if (pb == 1) {
+						sprintf(lcd_buff, "Cap: %.3fnF", cap*1000000000);
+					}
+					else {
+						sprintf(lcd_buff, "Cap: %.6fuF", cap*1000000);
+					}
+					LCDprint(lcd_buff, 2, 1);
+				}
+				if (cap > 0.000000002 && cap <= 0.000001) {
+					if (pb == 1) {
+						sprintf(lcd_buff, "Cap: %.3fuF", cap*1000000);
+					}
+					else {
+						sprintf(lcd_buff, "Cap: %.3fnF", cap*1000000000);
+					}
+					LCDprint(lcd_buff, 2, 1);
+				}
+				if (cap > 0.000001 && cap <= 0.001) {
+					if (pb == 1) {
+						sprintf(lcd_buff, "Cap: %.3fmF", cap*1000);
+					}
+					else {
+						sprintf(lcd_buff, "Cap: %.3fuF", cap*1000000);
+					}
+					LCDprint(lcd_buff, 2, 1);
+				}
+			}
+			else if (f > 120000) {
+				T=count/(F_CPU*100.0); // Since we have the time of 100 periods, we need to divide by 100
+				f=1.0/T;
+				sprintf(lcd_buff, "NO CAPACITOR            \r");
+				LCDprint(lcd_buff, 2, 1);
+			}
+			fflush(stdout); // GCC printf wants a \n in order to send something.  If \n is not present, we fflush(stdout)
+			waitms(200);
+			j=readADC(ADC_CHSELR_CHSEL8);
+			a=(j*3.3)/0x1000;
+			sprintf(lcd_buff,"R=%5.0f%c %c%c%d", 1000*(3.3/a -1) 
+											  , 0b11110100
+											  , (LED_state == 3) ? 'b' : (LED_state == 2) ? 'g' : (LED_state == 1) ? 'r' : ' '
+											  , (LED_state == 0) ? ' ' : ':'
+											  , (LED_state == 3) ? pwm5 : (LED_state == 2) ? pwm4 : (LED_state == 1) ? pwm3 : 0
+											  );
+			LCDprint(lcd_buff, 1, 1);
+		}
+		else {
+			sprintf(lcd_buff, "%d %d %d %d", !s4, !s3, !s2, !s1);
+			LCDprint(lcd_buff, 2, 1);
+		 	LCDprint("LOCKED          ", 1, 1);
 		}
 		
+		
+	
 	}
 }
